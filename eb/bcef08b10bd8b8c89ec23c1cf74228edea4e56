@@ -1,0 +1,54 @@
+src/main.rs
+  27bcd7891562dd8e 1-19
+src/resolver.rs
+  27bcd7891562dd8e 1-109
+src/git/detail.rs
+  27bcd7891562dd8e 1-834
+src/git/mod.rs
+  27bcd7891562dd8e 1-4
+.gitignore
+  27bcd7891562dd8e 1
+src/git/status.rs
+  27bcd7891562dd8e 1-126
+src/error.rs
+  27bcd7891562dd8e 1-19
+Cargo.toml
+  27bcd7891562dd8e 1-28
+src/models.rs
+  27bcd7891562dd8e 1-126
+src/tui.rs
+  27bcd7891562dd8e 1-1283
+src/cache.rs
+  27bcd7891562dd8e 1-76
+src/git/discovery.rs
+  27bcd7891562dd8e 1-30
+src/output.rs
+  27bcd7891562dd8e 1-274
+src/scanner.rs
+  27bcd7891562dd8e 1-25
+src/cli.rs
+  27bcd7891562dd8e 1-294
+src/git/operations.rs
+  27bcd7891562dd8e 1-186
+src/handlers.rs
+  27bcd7891562dd8e 1-588
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "ebbcef08b10bd8b8c89ec23c1cf74228edea4e56",
+  "prompts": {
+    "27bcd7891562dd8e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d2b432a3-3c3b-4605-813b-b972e8387d8e",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Graham Brooks <graham@grahambrooks.com>",
+      "total_additions": 4043,
+      "total_deletions": 23,
+      "accepted_lines": 4021,
+      "overriden_lines": 0
+    }
+  }
+}
