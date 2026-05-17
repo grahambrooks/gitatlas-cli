@@ -15,11 +15,12 @@ use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
-    Block, Borders, Clear, Paragraph, Row, Table, TableState, Tabs, Wrap,
+    Block, Borders, Cell, Clear, Paragraph, Row, Table, TableState, Tabs, Wrap,
 };
 use ratatui::{Frame, Terminal};
 
 use crate::cache;
+use crate::git::operations::ProgressEvent;
 use crate::git::{detail, operations, status as git_status};
 use crate::models::{
     BranchInfo, CommitInfo, FileChange, RefKind, RepoHealth, RepoInfo, StashEntry,
@@ -132,6 +133,54 @@ impl BulkOp {
     }
 }
 
+#[derive(Clone, Copy)]
+enum SingleOp {
+    Fetch,
+    Pull,
+    Push,
+}
+
+impl SingleOp {
+    fn progress_verb(&self) -> &'static str {
+        match self {
+            SingleOp::Fetch => "fetching",
+            SingleOp::Pull => "pulling",
+            SingleOp::Push => "pushing",
+        }
+    }
+    fn success_verb(&self) -> &'static str {
+        match self {
+            SingleOp::Fetch => "fetched",
+            SingleOp::Pull => "pulled",
+            SingleOp::Push => "pushed",
+        }
+    }
+}
+
+enum SingleEvent {
+    Progress(ProgressEvent),
+    Done(Result<RepoInfo, String>),
+}
+
+#[derive(Default)]
+struct SingleProgress {
+    stage: Option<String>,
+    sideband: Option<String>,
+    tip: Option<String>,
+    transfer: Option<(usize, usize, usize, usize)>, // bytes, indexed, received, total objects
+    push: Option<(usize, usize, usize)>,            // current, total, bytes
+    rebase: Option<(usize, usize)>,                 // current, total
+}
+
+struct SingleState {
+    op: SingleOp,
+    name: String,
+    path: String,
+    started: Instant,
+    progress: SingleProgress,
+    rx: Receiver<SingleEvent>,
+}
+
 enum WorkerMsg {
     Progress { name: String },
     Done {
@@ -176,6 +225,7 @@ struct App {
     detail: Option<Detail>,
     status: Option<StatusMsg>,
     bulk: Option<BulkState>,
+    single: Option<SingleState>,
     should_quit: bool,
 }
 
@@ -196,6 +246,7 @@ impl App {
             detail: None,
             status: None,
             bulk: None,
+            single: None,
             should_quit: false,
         }
     }
@@ -290,6 +341,71 @@ impl App {
             }
         }
     }
+
+    fn drain_single(&mut self) {
+        let Some(single) = self.single.as_mut() else { return };
+        loop {
+            match single.rx.try_recv() {
+                Ok(SingleEvent::Progress(ev)) => match ev {
+                    ProgressEvent::Stage(s) => single.progress.stage = Some(s),
+                    ProgressEvent::Transfer {
+                        received_bytes,
+                        indexed_objects,
+                        received_objects,
+                        total_objects,
+                    } => {
+                        single.progress.transfer = Some((
+                            received_bytes,
+                            indexed_objects,
+                            received_objects,
+                            total_objects,
+                        ));
+                    }
+                    ProgressEvent::PushTransfer { current, total, bytes } => {
+                        single.progress.push = Some((current, total, bytes));
+                    }
+                    ProgressEvent::Sideband(s) => single.progress.sideband = Some(s),
+                    ProgressEvent::Tip(s) => single.progress.tip = Some(s),
+                    ProgressEvent::RebaseStep { current, total } => {
+                        single.progress.rebase = Some((current, total));
+                    }
+                },
+                Ok(SingleEvent::Done(result)) => {
+                    let name = single.name.clone();
+                    let path = single.path.clone();
+                    let success_verb = single.op.success_verb();
+                    let elapsed = single.started.elapsed();
+                    self.single = None;
+                    match result {
+                        Ok(updated) => {
+                            if let Some(existing) = self.repos.iter_mut().find(|r| r.path == path) {
+                                *existing = updated;
+                            }
+                            cache::save(&self.repos);
+                            self.set_status(
+                                format!(
+                                    "{} {} in {}",
+                                    success_verb,
+                                    name,
+                                    fmt_duration(elapsed)
+                                ),
+                                Level::Success,
+                            );
+                        }
+                        Err(e) => self.set_status(format!("{}: {}", name, e), Level::Error),
+                    }
+                    return;
+                }
+                Err(mpsc::TryRecvError::Empty) => return,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    let name = single.name.clone();
+                    self.single = None;
+                    self.set_status(format!("{}: worker disconnected", name), Level::Error);
+                    return;
+                }
+            }
+        }
+    }
 }
 
 // ── Event loop ────────────────────────────────────────
@@ -301,7 +417,14 @@ fn event_loop(
     loop {
         terminal.draw(|f| draw(f, &mut app))?;
 
-        if event::poll(Duration::from_millis(100))? {
+        // Poll more often while an op is in flight so the spinner stays smooth
+        // and progress updates render promptly.
+        let poll_ms = if app.single.is_some() || app.bulk.is_some() {
+            80
+        } else {
+            200
+        };
+        if event::poll(Duration::from_millis(poll_ms))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
                     handle_key(&mut app, key);
@@ -310,6 +433,7 @@ fn event_loop(
         }
 
         app.drain_worker();
+        app.drain_single();
         app.tick();
 
         if app.should_quit {
@@ -426,6 +550,18 @@ fn draw_statusline(f: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
+    if let Some(single) = &app.single {
+        let label = format!(" {} ", single_progress_summary(single));
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                label,
+                Style::default().fg(Color::Black).bg(Color::Yellow),
+            )),
+            area,
+        );
+        return;
+    }
+
     if let Some(msg) = &app.status {
         let color = match msg.level {
             Level::Info => Color::Blue,
@@ -473,14 +609,14 @@ fn draw_dashboard(f: &mut Frame, area: Rect, app: &mut App) {
         .map(|&i| {
             let r = &app.repos[i];
             Row::new(vec![
-                r.name.clone(),
-                r.branch.clone(),
-                num_cell(r.ahead),
-                num_cell(r.behind),
-                num_cell(r.dirty_files),
-                r.stash_count.to_string(),
-                health_label(r.health),
-                r.path.clone(),
+                name_cell(r),
+                branch_cell(&r.branch),
+                ahead_cell(r.ahead),
+                behind_cell(r.behind),
+                dirty_cell(r.dirty_files),
+                stash_cell(r.stash_count),
+                health_cell(r.health),
+                path_cell(&r.path),
             ])
         })
         .collect();
@@ -533,23 +669,62 @@ fn draw_detail(f: &mut Frame, area: Rect, app: &mut App) {
         ])
         .split(area);
 
-    // Summary block
+    // Summary block — name tinted by health so dirty/diverged/error pop;
+    // numeric counters colored individually (dim when zero).
+    let name_color = if repo.health == RepoHealth::Clean {
+        Color::Cyan
+    } else {
+        health_color(repo.health)
+    };
+    let counter_style = |n: u32, color: Color| {
+        if n == 0 {
+            Style::default().fg(Color::DarkGray)
+        } else {
+            Style::default().fg(color).add_modifier(Modifier::BOLD)
+        }
+    };
+    let dim = Style::default().fg(Color::DarkGray);
     let summary_lines = vec![
         Line::from(vec![
-            Span::styled(&repo.name, Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan)),
-            Span::raw("  "),
-            Span::styled(format!("on {}", repo.branch), Style::default().fg(Color::Green)),
-            Span::raw("  "),
             Span::styled(
-                format!("↑{} ↓{}  dirty {}  stash {}  {}",
-                    repo.ahead, repo.behind, repo.dirty_files, repo.stash_count,
-                    health_name(repo.health)),
-                Style::default().fg(Color::DarkGray),
+                repo.name.clone(),
+                Style::default().add_modifier(Modifier::BOLD).fg(name_color),
+            ),
+            Span::raw("  "),
+            Span::styled("on ", dim),
+            Span::styled(
+                repo.branch.clone(),
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("   "),
+            Span::styled("↑", dim),
+            Span::styled(repo.ahead.to_string(), counter_style(repo.ahead, Color::Green)),
+            Span::raw(" "),
+            Span::styled("↓", dim),
+            Span::styled(repo.behind.to_string(), counter_style(repo.behind, Color::Red)),
+            Span::raw("   "),
+            Span::styled("dirty ", dim),
+            Span::styled(
+                repo.dirty_files.to_string(),
+                counter_style(repo.dirty_files, Color::Yellow),
+            ),
+            Span::raw("   "),
+            Span::styled("stash ", dim),
+            Span::styled(
+                repo.stash_count.to_string(),
+                counter_style(repo.stash_count, Color::Magenta),
+            ),
+            Span::raw("   "),
+            Span::styled(
+                health_name(repo.health),
+                Style::default()
+                    .fg(health_color(repo.health))
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(vec![
-            Span::styled("path:   ", Style::default().fg(Color::DarkGray)),
-            Span::raw(&repo.path),
+            Span::styled("path:   ", dim),
+            Span::styled(repo.path.clone(), Style::default().fg(Color::DarkGray)),
         ]),
     ];
     f.render_widget(
@@ -588,12 +763,16 @@ fn draw_tab_changes(f: &mut Frame, area: Rect, detail: &mut Detail) {
         Some(changes) if !changes.is_empty() => changes
             .iter()
             .map(|c| {
-                let staged_label = if c.staged { "staged" } else { "unstaged" };
-                let status_cell = c.status.short().to_string();
                 Row::new(vec![
-                    staged_label.to_string(),
-                    status_cell,
-                    c.path.clone(),
+                    staged_cell(c.staged),
+                    Cell::from(Span::styled(
+                        c.status.short().to_string(),
+                        file_status_style(c.status).add_modifier(Modifier::BOLD),
+                    )),
+                    Cell::from(Span::styled(
+                        c.path.clone(),
+                        file_status_style(c.status),
+                    )),
                 ])
             })
             .collect(),
@@ -648,25 +827,24 @@ fn draw_tab_history(f: &mut Frame, area: Rect, detail: &mut Detail) {
     let rows: Vec<Row> = commits
         .iter()
         .map(|c| {
-            let refs = c
-                .refs
-                .iter()
-                .map(|r| match r.kind {
-                    RefKind::Head => format!("HEAD→{}", r.name),
-                    RefKind::Local => r.name.clone(),
-                    RefKind::Remote => format!("r/{}", r.name),
-                    RefKind::Tag => format!("tag:{}", r.name),
-                })
-                .collect::<Vec<_>>()
-                .join(",");
+            let mut ref_spans: Vec<Span> = Vec::new();
+            for (i, r) in c.refs.iter().enumerate() {
+                if i > 0 {
+                    ref_spans.push(Span::styled(",", Style::default().fg(Color::DarkGray)));
+                }
+                ref_spans.push(ref_span(r.kind, &r.name));
+            }
             let msg = c.message.lines().next().unwrap_or("").to_string();
             let date = c.date.split('T').next().unwrap_or(&c.date).to_string();
             Row::new(vec![
-                c.short_oid.clone(),
-                date,
-                c.author.clone(),
-                refs,
-                msg,
+                Cell::from(Span::styled(
+                    c.short_oid.clone(),
+                    Style::default().fg(Color::Yellow),
+                )),
+                Cell::from(Span::styled(date, Style::default().fg(Color::DarkGray))),
+                Cell::from(Span::styled(c.author.clone(), Style::default().fg(Color::Cyan))),
+                Cell::from(Line::from(ref_spans)),
+                Cell::from(msg),
             ])
         })
         .collect();
@@ -712,18 +890,36 @@ fn draw_tab_branches(f: &mut Frame, area: Rect, detail: &mut Detail) {
     let rows: Vec<Row> = branches
         .iter()
         .map(|b| {
-            let kind = if b.is_head {
-                "HEAD"
+            let (kind, kind_color) = if b.is_head {
+                ("HEAD", Color::Green)
             } else if b.is_remote {
-                "remote"
+                ("remote", Color::Yellow)
             } else {
-                "local"
+                ("local", Color::Cyan)
             };
+            let marker = if b.is_head {
+                Cell::from(Span::styled(
+                    "*".to_string(),
+                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                ))
+            } else {
+                Cell::from(" ".to_string())
+            };
+            let mut name_style = Style::default().fg(kind_color);
+            if b.is_head {
+                name_style = name_style.add_modifier(Modifier::BOLD);
+            }
             Row::new(vec![
-                if b.is_head { "*".to_string() } else { " ".to_string() },
-                kind.to_string(),
-                b.name.clone(),
-                b.upstream.clone().unwrap_or_default(),
+                marker,
+                Cell::from(Span::styled(
+                    kind.to_string(),
+                    Style::default().fg(kind_color),
+                )),
+                Cell::from(Span::styled(b.name.clone(), name_style)),
+                Cell::from(Span::styled(
+                    b.upstream.clone().unwrap_or_default(),
+                    Style::default().fg(Color::DarkGray),
+                )),
             ])
         })
         .collect();
@@ -767,7 +963,15 @@ fn draw_tab_stashes(f: &mut Frame, area: Rect, detail: &mut Detail) {
 
     let rows: Vec<Row> = stashes
         .iter()
-        .map(|s| Row::new(vec![format!("stash@{{{}}}", s.index), s.message.clone()]))
+        .map(|s| {
+            Row::new(vec![
+                Cell::from(Span::styled(
+                    format!("stash@{{{}}}", s.index),
+                    Style::default().fg(Color::Magenta),
+                )),
+                Cell::from(s.message.clone()),
+            ])
+        })
         .collect();
 
     let table = Table::new(rows, [Constraint::Length(12), Constraint::Min(20)])
@@ -842,10 +1046,6 @@ fn centered(width: u16, height: u16, area: Rect) -> Rect {
     Rect::new(x, y, w, h)
 }
 
-fn num_cell(n: u32) -> String {
-    n.to_string()
-}
-
 fn health_name(h: RepoHealth) -> &'static str {
     match h {
         RepoHealth::Clean => "clean",
@@ -855,8 +1055,115 @@ fn health_name(h: RepoHealth) -> &'static str {
     }
 }
 
-fn health_label(h: RepoHealth) -> String {
-    health_name(h).to_string()
+// ── Theme helpers ─────────────────────────────────────
+
+fn health_color(h: RepoHealth) -> Color {
+    match h {
+        RepoHealth::Clean => Color::Green,
+        RepoHealth::Dirty => Color::Yellow,
+        RepoHealth::Diverged => Color::Magenta,
+        RepoHealth::Error => Color::Red,
+    }
+}
+
+fn name_cell(repo: &RepoInfo) -> Cell<'static> {
+    let mut style = Style::default().add_modifier(Modifier::BOLD);
+    // Clean repos render plain — only repos needing attention get tinted.
+    if repo.health != RepoHealth::Clean {
+        style = style.fg(health_color(repo.health));
+    }
+    Cell::from(Span::styled(repo.name.clone(), style))
+}
+
+fn branch_cell(branch: &str) -> Cell<'static> {
+    Cell::from(Span::styled(
+        branch.to_string(),
+        Style::default().fg(Color::Cyan),
+    ))
+}
+
+fn count_cell(n: u32, on_nonzero: Style) -> Cell<'static> {
+    let s = n.to_string();
+    if n == 0 {
+        Cell::from(Span::styled(s, Style::default().fg(Color::DarkGray)))
+    } else {
+        Cell::from(Span::styled(s, on_nonzero))
+    }
+}
+
+fn ahead_cell(n: u32) -> Cell<'static> {
+    count_cell(n, Style::default().fg(Color::Green))
+}
+
+fn behind_cell(n: u32) -> Cell<'static> {
+    count_cell(n, Style::default().fg(Color::Red))
+}
+
+fn dirty_cell(n: u32) -> Cell<'static> {
+    count_cell(
+        n,
+        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+    )
+}
+
+fn stash_cell(n: u32) -> Cell<'static> {
+    count_cell(n, Style::default().fg(Color::Magenta))
+}
+
+fn health_cell(h: RepoHealth) -> Cell<'static> {
+    Cell::from(Span::styled(
+        health_name(h).to_string(),
+        Style::default()
+            .fg(health_color(h))
+            .add_modifier(Modifier::BOLD),
+    ))
+}
+
+fn path_cell(path: &str) -> Cell<'static> {
+    Cell::from(Span::styled(
+        path.to_string(),
+        Style::default().fg(Color::DarkGray),
+    ))
+}
+
+fn file_status_style(s: crate::models::FileStatus) -> Style {
+    use crate::models::FileStatus::*;
+    match s {
+        Added => Style::default().fg(Color::Green),
+        Modified => Style::default().fg(Color::Yellow),
+        Deleted => Style::default().fg(Color::Red),
+        Renamed => Style::default().fg(Color::Cyan),
+        Untracked => Style::default().fg(Color::DarkGray),
+        Conflicted => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+    }
+}
+
+fn staged_cell(staged: bool) -> Cell<'static> {
+    if staged {
+        Cell::from(Span::styled(
+            "staged".to_string(),
+            Style::default().fg(Color::Green),
+        ))
+    } else {
+        Cell::from(Span::styled(
+            "unstaged".to_string(),
+            Style::default().fg(Color::Yellow),
+        ))
+    }
+}
+
+fn ref_span(kind: RefKind, name: &str) -> Span<'static> {
+    let (label, color, bold) = match kind {
+        RefKind::Head => (format!("HEAD→{}", name), Color::Green, true),
+        RefKind::Local => (name.to_string(), Color::Cyan, false),
+        RefKind::Remote => (format!("r/{}", name), Color::Yellow, false),
+        RefKind::Tag => (format!("tag:{}", name), Color::Magenta, false),
+    };
+    let mut style = Style::default().fg(color);
+    if bold {
+        style = style.add_modifier(Modifier::BOLD);
+    }
+    Span::styled(label, style)
 }
 
 // ── Key handling ──────────────────────────────────────
@@ -951,17 +1258,17 @@ fn handle_dashboard_key(app: &mut App, key: KeyEvent) {
 
         KeyCode::Char('f') => {
             if let Some(path) = selected_path(app, &indices) {
-                run_single_sync(app, path, |p| operations::fetch_repo(p), "fetched");
+                start_single(app, path, SingleOp::Fetch);
             }
         }
         KeyCode::Char('p') => {
             if let Some(path) = selected_path(app, &indices) {
-                run_single_sync(app, path, |p| operations::pull_rebase_repo(p), "pulled");
+                start_single(app, path, SingleOp::Pull);
             }
         }
         KeyCode::Char('P') => {
             if let Some(path) = selected_path(app, &indices) {
-                run_single_sync(app, path, |p| operations::push_repo(p), "pushed");
+                start_single(app, path, SingleOp::Push);
             }
         }
 
@@ -1061,9 +1368,9 @@ fn handle_detail_key(app: &mut App, key: KeyEvent) {
     if let Some(repo) = app.repos.get(app.detail.as_ref().unwrap().repo_index).cloned() {
         let path = PathBuf::from(&repo.path);
         match key.code {
-            KeyCode::Char('f') => run_single_sync(app, path, |p| operations::fetch_repo(p), "fetched"),
-            KeyCode::Char('p') => run_single_sync(app, path, |p| operations::pull_rebase_repo(p), "pulled"),
-            KeyCode::Char('P') => run_single_sync(app, path, |p| operations::push_repo(p), "pushed"),
+            KeyCode::Char('f') => start_single(app, path, SingleOp::Fetch),
+            KeyCode::Char('p') => start_single(app, path, SingleOp::Pull),
+            KeyCode::Char('P') => start_single(app, path, SingleOp::Push),
             _ => {}
         }
     }
@@ -1111,27 +1418,153 @@ fn selected_path(app: &App, indices: &[usize]) -> Option<PathBuf> {
 
 // ── Actions ───────────────────────────────────────────
 
-fn run_single_sync<F>(app: &mut App, path: PathBuf, op: F, success_verb: &str)
-where
-    F: FnOnce(&std::path::Path) -> Result<(), crate::error::AppError>,
-{
+fn start_single(app: &mut App, path: PathBuf, op: SingleOp) {
+    if app.single.is_some() {
+        app.set_status("another operation is already running", Level::Warn);
+        return;
+    }
+    if app.bulk.is_some() {
+        app.set_status("bulk operation in progress", Level::Warn);
+        return;
+    }
+
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| path.display().to_string());
-    app.set_status(format!("working on {}…", name), Level::Info);
+    let path_str = path.display().to_string();
 
-    match op(&path) {
-        Ok(()) => {
-            let info = git_status::get_repo_info(&path);
-            if let Some(existing) = app.repos.iter_mut().find(|r| r.path == info.path) {
-                *existing = info;
+    let (event_tx, rx) = mpsc::channel::<SingleEvent>();
+
+    // Bridge ProgressEvents from operations into our SingleEvent::Progress wrapper.
+    let (prog_tx, prog_rx) = mpsc::channel::<ProgressEvent>();
+    let bridge_tx = event_tx.clone();
+    thread::spawn(move || {
+        while let Ok(ev) = prog_rx.recv() {
+            if bridge_tx.send(SingleEvent::Progress(ev)).is_err() {
+                break;
             }
-            cache::save(&app.repos);
-            app.set_status(format!("{} {}", success_verb, name), Level::Success);
         }
-        Err(e) => app.set_status(format!("{}: {}", name, e), Level::Error),
+    });
+
+    let worker_path = path.clone();
+    let done_tx = event_tx;
+    thread::spawn(move || {
+        let result = match op {
+            SingleOp::Fetch => {
+                operations::fetch_repo_with_progress(&worker_path, Some(prog_tx))
+            }
+            SingleOp::Pull => {
+                operations::pull_rebase_repo_with_progress(&worker_path, Some(prog_tx))
+            }
+            SingleOp::Push => {
+                operations::push_repo_with_progress(&worker_path, Some(prog_tx))
+            }
+        };
+        let payload = result
+            .map(|()| git_status::get_repo_info(&worker_path))
+            .map_err(|e| e.to_string());
+        let _ = done_tx.send(SingleEvent::Done(payload));
+    });
+
+    app.single = Some(SingleState {
+        op,
+        name,
+        path: path_str,
+        started: Instant::now(),
+        progress: SingleProgress::default(),
+        rx,
+    });
+}
+
+const SPINNER: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+fn spinner_frame(elapsed: Duration) -> char {
+    let idx = (elapsed.as_millis() / 80) as usize % SPINNER.len();
+    SPINNER[idx]
+}
+
+fn fmt_duration(d: Duration) -> String {
+    let secs = d.as_secs();
+    if secs >= 60 {
+        format!("{}m{:02}s", secs / 60, secs % 60)
+    } else if secs > 0 {
+        format!("{}.{}s", secs, d.subsec_millis() / 100)
+    } else {
+        format!("{}ms", d.as_millis())
     }
+}
+
+fn fmt_bytes(n: usize) -> String {
+    const KB: usize = 1024;
+    const MB: usize = 1024 * KB;
+    const GB: usize = 1024 * MB;
+    if n >= GB {
+        format!("{:.1} GB", n as f64 / GB as f64)
+    } else if n >= MB {
+        format!("{:.1} MB", n as f64 / MB as f64)
+    } else if n >= KB {
+        format!("{:.1} KB", n as f64 / KB as f64)
+    } else {
+        format!("{} B", n)
+    }
+}
+
+fn single_progress_summary(single: &SingleState) -> String {
+    let elapsed = single.started.elapsed();
+    let mut parts: Vec<String> = Vec::new();
+
+    if let Some(stage) = &single.progress.stage {
+        parts.push(stage.clone());
+    } else {
+        parts.push(single.op.progress_verb().to_string());
+    }
+
+    if let Some((bytes, indexed, received, total)) = single.progress.transfer {
+        if total > 0 {
+            parts.push(format!(
+                "{} • {}/{} objects (indexed {})",
+                fmt_bytes(bytes),
+                received,
+                total,
+                indexed,
+            ));
+        } else if bytes > 0 {
+            parts.push(fmt_bytes(bytes));
+        }
+    }
+
+    if let Some((current, total, bytes)) = single.progress.push {
+        if total > 0 {
+            parts.push(format!(
+                "{}/{} objects • {}",
+                current,
+                total,
+                fmt_bytes(bytes)
+            ));
+        }
+    }
+
+    if let Some((current, total)) = single.progress.rebase {
+        if total > 0 {
+            parts.push(format!("rebase {}/{}", current, total));
+        }
+    }
+
+    if let Some(tip) = &single.progress.tip {
+        parts.push(tip.clone());
+    } else if let Some(sb) = &single.progress.sideband {
+        parts.push(sb.clone());
+    }
+
+    parts.push(fmt_duration(elapsed));
+
+    format!(
+        "{} {} {}",
+        spinner_frame(elapsed),
+        single.name,
+        parts.join(" • "),
+    )
 }
 
 fn run_scan(app: &mut App) {
@@ -1154,6 +1587,10 @@ fn run_scan(app: &mut App) {
 fn start_bulk(app: &mut App, op: BulkOp) {
     if app.bulk.is_some() {
         app.set_status("bulk operation already running", Level::Warn);
+        return;
+    }
+    if app.single.is_some() {
+        app.set_status("another operation is already running", Level::Warn);
         return;
     }
     if app.repos.is_empty() {
