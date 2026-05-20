@@ -124,3 +124,75 @@ pub struct GitProfile {
     pub name: String,
     pub email: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repo_health_parse_known_values() {
+        assert_eq!(RepoHealth::parse("clean"), Some(RepoHealth::Clean));
+        assert_eq!(RepoHealth::parse("dirty"), Some(RepoHealth::Dirty));
+        assert_eq!(RepoHealth::parse("changes"), Some(RepoHealth::Dirty));
+        assert_eq!(RepoHealth::parse("diverged"), Some(RepoHealth::Diverged));
+        assert_eq!(RepoHealth::parse("error"), Some(RepoHealth::Error));
+    }
+
+    #[test]
+    fn repo_health_parse_is_case_insensitive() {
+        assert_eq!(RepoHealth::parse("CLEAN"), Some(RepoHealth::Clean));
+        assert_eq!(RepoHealth::parse("Dirty"), Some(RepoHealth::Dirty));
+        assert_eq!(RepoHealth::parse("Diverged"), Some(RepoHealth::Diverged));
+    }
+
+    #[test]
+    fn repo_health_parse_unknown_is_none() {
+        assert_eq!(RepoHealth::parse(""), None);
+        assert_eq!(RepoHealth::parse("healthy"), None);
+        assert_eq!(RepoHealth::parse("conflict"), None);
+    }
+
+    #[test]
+    fn repo_health_serde_uses_lowercase() {
+        assert_eq!(
+            serde_json::to_string(&RepoHealth::Diverged).unwrap(),
+            "\"diverged\""
+        );
+        assert_eq!(
+            serde_json::from_str::<RepoHealth>("\"clean\"").unwrap(),
+            RepoHealth::Clean
+        );
+    }
+
+    #[test]
+    fn file_status_short_codes() {
+        assert_eq!(FileStatus::Added.short(), "A");
+        assert_eq!(FileStatus::Modified.short(), "M");
+        assert_eq!(FileStatus::Deleted.short(), "D");
+        assert_eq!(FileStatus::Renamed.short(), "R");
+        assert_eq!(FileStatus::Untracked.short(), "?");
+        assert_eq!(FileStatus::Conflicted.short(), "U");
+    }
+
+    #[test]
+    fn file_status_serde_round_trip() {
+        for status in [
+            FileStatus::Added,
+            FileStatus::Modified,
+            FileStatus::Deleted,
+            FileStatus::Renamed,
+            FileStatus::Untracked,
+            FileStatus::Conflicted,
+        ] {
+            let json = serde_json::to_string(&status).unwrap();
+            let back: FileStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(status, back);
+        }
+    }
+
+    #[test]
+    fn ref_kind_serde_lowercase() {
+        assert_eq!(serde_json::to_string(&RefKind::Head).unwrap(), "\"head\"");
+        assert_eq!(serde_json::to_string(&RefKind::Remote).unwrap(), "\"remote\"");
+    }
+}

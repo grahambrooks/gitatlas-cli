@@ -81,3 +81,36 @@ fn expand_tilde(path: PathBuf) -> PathBuf {
     }
     path
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expand_tilde_leaves_absolute_paths_untouched() {
+        let p = PathBuf::from("/etc/ssh/id_rsa");
+        assert_eq!(expand_tilde(p.clone()), p);
+    }
+
+    #[test]
+    fn expand_tilde_leaves_relative_paths_untouched() {
+        let p = PathBuf::from("keys/id_rsa");
+        assert_eq!(expand_tilde(p.clone()), p);
+    }
+
+    #[test]
+    fn expand_tilde_does_not_expand_bare_tilde() {
+        // Only the "~/" prefix is expanded, not a bare "~".
+        let p = PathBuf::from("~weird");
+        assert_eq!(expand_tilde(p.clone()), p);
+    }
+
+    #[test]
+    fn expand_tilde_expands_home_prefix() {
+        // Read HOME ourselves to compute the expectation; no test mutates it.
+        if let Ok(home) = std::env::var("HOME") {
+            let expanded = expand_tilde(PathBuf::from("~/.ssh/id_ed25519"));
+            assert_eq!(expanded, PathBuf::from(home).join(".ssh/id_ed25519"));
+        }
+    }
+}

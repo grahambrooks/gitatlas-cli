@@ -8,12 +8,7 @@ use crate::models::RepoInfo;
 /// to a concrete repository path.
 pub fn resolve(identifier: &str) -> AppResult<PathBuf> {
     // "." and paths: check directly
-    if identifier == "."
-        || identifier.starts_with('/')
-        || identifier.starts_with("./")
-        || identifier.starts_with("../")
-        || identifier.starts_with('~')
-    {
+    if looks_like_path(identifier) {
         return resolve_path(identifier);
     }
 
@@ -105,4 +100,81 @@ pub fn resolve_many(identifiers: &[String], all: bool) -> AppResult<Vec<(String,
         out.push((name, path));
     }
     Ok(out)
+}
+
+/// True if an identifier should be treated as a filesystem path rather than a
+/// cache lookup by name.
+fn looks_like_path(identifier: &str) -> bool {
+    identifier == "."
+        || identifier.starts_with('/')
+        || identifier.starts_with("./")
+        || identifier.starts_with("../")
+        || identifier.starts_with('~')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        static COUNTER: AtomicU32 = AtomicU32::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "gitatlas-test-{}-{}-{}",
+            label,
+            std::process::id(),
+            n
+        ));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    #[test]
+    fn path_detection() {
+        assert!(looks_like_path("."));
+        assert!(looks_like_path("/abs/path"));
+        assert!(looks_like_path("./rel"));
+        assert!(looks_like_path("../up"));
+        assert!(looks_like_path("~/home/repo"));
+        assert!(looks_like_path("~"));
+
+        assert!(!looks_like_path("myrepo"));
+        assert!(!looks_like_path("some-name"));
+    }
+
+    #[test]
+    fn resolve_path_accepts_git_dir() {
+        let dir = unique_temp_dir("resolve-ok");
+        fs::create_dir_all(dir.join(".git")).expect("create .git");
+
+        let resolved = resolve_path(dir.to_str().unwrap()).expect("should resolve");
+        assert!(resolved.join(".git").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn resolve_path_rejects_non_git_dir() {
+        let dir = unique_temp_dir("resolve-nongit");
+
+        let err = resolve_path(dir.to_str().unwrap()).unwrap_err();
+        assert!(err.to_string().contains("not a git repository"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn resolve_path_missing_path_errors() {
+        let missing = std::env::temp_dir().join("gitatlas-definitely-missing-xyz");
+        let err = resolve_path(missing.to_str().unwrap()).unwrap_err();
+        assert!(err.to_string().contains("Cannot resolve"));
+    }
+
+    #[test]
+    fn resolve_many_empty_without_all_errors() {
+        let err = resolve_many(&[], false).unwrap_err();
+        assert!(err.to_string().contains("Specify one or more repos"));
+    }
 }

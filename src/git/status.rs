@@ -124,3 +124,35 @@ fn determine_health(ahead: u32, behind: u32, dirty_files: u32) -> RepoHealth {
         RepoHealth::Clean
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn health_clean_when_in_sync() {
+        assert_eq!(determine_health(0, 0, 0), RepoHealth::Clean);
+    }
+
+    #[test]
+    fn health_dirty_with_local_only_changes() {
+        // ahead, or dirty files, but not behind => dirty.
+        assert_eq!(determine_health(1, 0, 0), RepoHealth::Dirty);
+        assert_eq!(determine_health(0, 0, 5), RepoHealth::Dirty);
+        assert_eq!(determine_health(2, 0, 3), RepoHealth::Dirty);
+    }
+
+    #[test]
+    fn health_behind_only_reports_clean() {
+        // Quirk: being purely behind upstream (no local commits or dirty files)
+        // is currently reported as Clean, not Dirty/Diverged.
+        assert_eq!(determine_health(0, 4, 0), RepoHealth::Clean);
+    }
+
+    #[test]
+    fn health_diverged_when_behind_and_local_changes() {
+        assert_eq!(determine_health(1, 1, 0), RepoHealth::Diverged);
+        assert_eq!(determine_health(0, 1, 2), RepoHealth::Diverged);
+        assert_eq!(determine_health(3, 2, 1), RepoHealth::Diverged);
+    }
+}
