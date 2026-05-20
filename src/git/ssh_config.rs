@@ -64,10 +64,8 @@ pub fn resolve(host: &str) -> ResolvedHost {
     // lands in `unsupported_fields`. Read it from there.
     if let Some(values) = params.unsupported_fields.get("identitiesonly") {
         if let Some(v) = values.first() {
-            out.identities_only = matches!(
-                v.to_ascii_lowercase().as_str(),
-                "yes" | "true" | "on" | "1"
-            );
+            out.identities_only =
+                matches!(v.to_ascii_lowercase().as_str(), "yes" | "true" | "on" | "1");
         }
     }
 

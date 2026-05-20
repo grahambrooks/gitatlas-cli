@@ -245,9 +245,17 @@ pub struct RemoteCmd {
 pub enum RemoteAction {
     /// List remotes (default).
     List,
-    Add { name: String, url: String },
-    Remove { name: String },
-    Rename { old: String, new: String },
+    Add {
+        name: String,
+        url: String,
+    },
+    Remove {
+        name: String,
+    },
+    Rename {
+        old: String,
+        new: String,
+    },
 }
 
 // ── Profile ──────────────────────────────
@@ -287,8 +295,14 @@ pub enum ConfigAction {
 #[derive(Debug, Subcommand)]
 pub enum RootsAction {
     List,
-    Add { path: String },
-    Remove { path: String },
+    Add {
+        path: String,
+    },
+    Remove {
+        path: String,
+    },
     /// Replace the scan roots with the given paths.
-    Set { paths: Vec<String> },
+    Set {
+        paths: Vec<String>,
+    },
 }

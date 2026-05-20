@@ -8,8 +8,11 @@ use crate::models::RepoInfo;
 /// to a concrete repository path.
 pub fn resolve(identifier: &str) -> AppResult<PathBuf> {
     // "." and paths: check directly
-    if identifier == "." || identifier.starts_with('/') || identifier.starts_with("./")
-        || identifier.starts_with("../") || identifier.starts_with('~')
+    if identifier == "."
+        || identifier.starts_with('/')
+        || identifier.starts_with("./")
+        || identifier.starts_with("../")
+        || identifier.starts_with('~')
     {
         return resolve_path(identifier);
     }
@@ -80,9 +83,7 @@ pub fn resolve_many(identifiers: &[String], all: bool) -> AppResult<Vec<(String,
     if all {
         let cached = cache::load();
         if cached.is_empty() {
-            return Err(AppError::msg(
-                "Cache is empty. Run `gitatlas scan` first.",
-            ));
+            return Err(AppError::msg("Cache is empty. Run `gitatlas scan` first."));
         }
         return Ok(cached
             .into_iter()
@@ -91,9 +92,7 @@ pub fn resolve_many(identifiers: &[String], all: bool) -> AppResult<Vec<(String,
     }
 
     if identifiers.is_empty() {
-        return Err(AppError::msg(
-            "Specify one or more repos, or pass --all.",
-        ));
+        return Err(AppError::msg("Specify one or more repos, or pass --all."));
     }
 
     let mut out = Vec::new();

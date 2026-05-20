@@ -1,4 +1,4 @@
-use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table, presets};
+use comfy_table::{presets, Attribute, Cell, Color, ContentArrangement, Table};
 use console::style;
 use serde::Serialize;
 
@@ -106,10 +106,7 @@ pub fn print_repo_status(repo: &RepoInfo) {
     println!("{}", style(&repo.name).bold().cyan());
     println!("  path:        {}", repo.path);
     println!("  branch:      {}", repo.branch);
-    println!(
-        "  ahead:       {}   behind: {}",
-        repo.ahead, repo.behind
-    );
+    println!("  ahead:       {}   behind: {}", repo.ahead, repo.behind);
     println!("  dirty files: {}", repo.dirty_files);
     println!("  stashes:     {}", repo.stash_count);
     let health_str = match repo.health {
@@ -170,11 +167,7 @@ pub fn print_file_changes(changes: &[FileChange]) {
     if !staged.is_empty() {
         println!("{}", style("Staged:").green().bold());
         for c in &staged {
-            println!(
-                "  {} {}",
-                style(c.status.short()).green(),
-                c.path
-            );
+            println!("  {} {}", style(c.status.short()).green(), c.path);
         }
     }
     if !unstaged.is_empty() {
@@ -183,11 +176,7 @@ pub fn print_file_changes(changes: &[FileChange]) {
         }
         println!("{}", style("Unstaged:").yellow().bold());
         for c in &unstaged {
-            println!(
-                "  {} {}",
-                style(c.status.short()).yellow(),
-                c.path
-            );
+            println!("  {} {}", style(c.status.short()).yellow(), c.path);
         }
     }
 }
@@ -248,7 +237,10 @@ pub fn print_remotes(remotes: &[RemoteInfo]) {
         return;
     }
     let mut table = new_table();
-    table.set_header(vec![Cell::new("NAME").add_attribute(Attribute::Bold), Cell::new("URL").add_attribute(Attribute::Bold)]);
+    table.set_header(vec![
+        Cell::new("NAME").add_attribute(Attribute::Bold),
+        Cell::new("URL").add_attribute(Attribute::Bold),
+    ]);
     for r in remotes {
         table.add_row(vec![Cell::new(&r.name), Cell::new(&r.url)]);
     }

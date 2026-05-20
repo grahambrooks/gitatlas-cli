@@ -41,7 +41,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Readme(args) => readme(&ctx, args),
         Command::Pr(args) => pr(&ctx, args),
         Command::Config(cmd) => config_cmd(&ctx, cmd),
-        Command::Tui => crate::tui::run().map_err(anyhow::Error::from),
+        Command::Tui => crate::tui::run(),
     }
 }
 
@@ -80,24 +80,21 @@ fn scan(ctx: &Ctx) -> Result<()> {
 
 fn list(ctx: &Ctx, args: ListArgs) -> Result<()> {
     if args.refresh {
-        return scan(ctx).and_then(|_| {
+        return scan(ctx).map(|_| {
             let repos = filter_cache(&args);
             emit_list(ctx, &repos);
-            Ok(())
         });
     }
 
     let repos = filter_cache(&args);
-    if repos.is_empty() {
-        if !ctx.json {
-            eprintln!(
-                "No cached repos{}. Run `gitatlas scan` first.",
-                match &args.search {
-                    Some(q) => format!(" matching '{}'", q),
-                    None => String::new(),
-                }
-            );
-        }
+    if repos.is_empty() && !ctx.json {
+        eprintln!(
+            "No cached repos{}. Run `gitatlas scan` first.",
+            match &args.search {
+                Some(q) => format!(" matching '{}'", q),
+                None => String::new(),
+            }
+        );
     }
     emit_list(ctx, &repos);
     Ok(())
@@ -235,7 +232,9 @@ fn refresh_cache_for(results: &[serde_json::Value]) {
         let Some(path) = r.get("path").and_then(|v| v.as_str()) else {
             continue;
         };
-        let Some(status) = r.get("status") else { continue };
+        let Some(status) = r.get("status") else {
+            continue;
+        };
         let Ok(updated) = serde_json::from_value::<RepoInfo>(status.clone()) else {
             continue;
         };

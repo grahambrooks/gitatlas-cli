@@ -19,7 +19,7 @@ pub fn discover_repos(root: &Path) -> Vec<PathBuf> {
 
     for entry in walker.flatten() {
         let path = entry.path();
-        if path.file_name().map_or(false, |n| n == ".git") && path.is_dir() {
+        if path.file_name().is_some_and(|n| n == ".git") && path.is_dir() {
             if let Some(parent) = path.parent() {
                 repos.push(parent.to_path_buf());
             }

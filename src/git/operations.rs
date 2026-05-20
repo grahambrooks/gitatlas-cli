@@ -77,7 +77,13 @@ fn make_callbacks(tx: Option<ProgressTx>, host: Option<ResolvedHost>) -> RemoteC
     let cred_tx = tx.clone();
     let mut state = CredState::new(host);
     callbacks.credentials(move |url, username_from_url, allowed_types| {
-        try_next_credential(&mut state, url, username_from_url, allowed_types, cred_tx.as_ref())
+        try_next_credential(
+            &mut state,
+            url,
+            username_from_url,
+            allowed_types,
+            cred_tx.as_ref(),
+        )
     });
 
     if let Some(tx) = tx.clone() {
@@ -95,7 +101,7 @@ fn make_callbacks(tx: Option<ProgressTx>, host: Option<ResolvedHost>) -> RemoteC
         let sb_tx = tx.clone();
         callbacks.sideband_progress(move |data| {
             if let Ok(s) = std::str::from_utf8(data) {
-                for line in s.split(|c| c == '\n' || c == '\r') {
+                for line in s.split(['\n', '\r']) {
                     let line = line.trim();
                     if !line.is_empty() {
                         let _ = sb_tx.send(ProgressEvent::Sideband(line.to_string()));
@@ -251,7 +257,10 @@ fn try_next_credential(
 
         if !state.tried_agent && !state.identities_only {
             state.tried_agent = true;
-            emit(tx, ProgressEvent::Stage(format!("auth: ssh-agent ({})", user)));
+            emit(
+                tx,
+                ProgressEvent::Stage(format!("auth: ssh-agent ({})", user)),
+            );
             if let Ok(cred) = Cred::ssh_key_from_agent(&user) {
                 return Ok(cred);
             }
@@ -265,10 +274,7 @@ fn try_next_credential(
                 p.set_extension("pub");
                 p
             };
-            emit(
-                tx,
-                ProgressEvent::Stage(format!("auth: {}", key.display())),
-            );
+            emit(tx, ProgressEvent::Stage(format!("auth: {}", key.display())));
             let pub_arg = if pub_path.exists() {
                 Some(pub_path)
             } else {
@@ -292,31 +298,35 @@ fn try_next_credential(
             .map(|u| u.to_string())
             .or_else(|| state.configured_user.clone())
             .unwrap_or_else(|| "git".to_string());
-        emit(tx, ProgressEvent::Stage(format!("auth: ssh-agent ({})", user)));
+        emit(
+            tx,
+            ProgressEvent::Stage(format!("auth: ssh-agent ({})", user)),
+        );
         if let Ok(cred) = Cred::ssh_key_from_agent(&user) {
             return Ok(cred);
         }
     }
 
-    if allowed_types.contains(CredentialType::USER_PASS_PLAINTEXT) {
-        if !state.tried_helper {
-            state.tried_helper = true;
-            emit(tx, ProgressEvent::Stage("auth: credential helper".into()));
-            if let Ok(cred) = Cred::credential_helper(
-                &git2::Config::open_default()
-                    .unwrap_or_else(|_| git2::Config::new().expect("failed to create git config")),
-                url,
-                username_from_url,
-            ) {
-                return Ok(cred);
-            }
+    if allowed_types.contains(CredentialType::USER_PASS_PLAINTEXT) && !state.tried_helper {
+        state.tried_helper = true;
+        emit(tx, ProgressEvent::Stage("auth: credential helper".into()));
+        if let Ok(cred) = Cred::credential_helper(
+            &git2::Config::open_default()
+                .unwrap_or_else(|_| git2::Config::new().expect("failed to create git config")),
+            url,
+            username_from_url,
+        ) {
+            return Ok(cred);
         }
     }
 
     if allowed_types.contains(CredentialType::USERNAME) && !state.tried_username_only {
         state.tried_username_only = true;
         if let Some(user) = username_from_url {
-            emit(tx, ProgressEvent::Stage(format!("auth: username ({})", user)));
+            emit(
+                tx,
+                ProgressEvent::Stage(format!("auth: username ({})", user)),
+            );
             if let Ok(cred) = Cred::username(user) {
                 return Ok(cred);
             }
@@ -351,20 +361,14 @@ fn try_next_credential(
     Err(git2::Error::from_str(&format!("auth: {}", summary)))
 }
 
-fn make_fetch_options(
-    tx: Option<ProgressTx>,
-    host: Option<ResolvedHost>,
-) -> FetchOptions<'static> {
+fn make_fetch_options(tx: Option<ProgressTx>, host: Option<ResolvedHost>) -> FetchOptions<'static> {
     let mut fetch_opts = FetchOptions::new();
     fetch_opts.remote_callbacks(make_callbacks(tx, host));
     fetch_opts.download_tags(AutotagOption::All);
     fetch_opts
 }
 
-fn make_push_options(
-    tx: Option<ProgressTx>,
-    host: Option<ResolvedHost>,
-) -> PushOptions<'static> {
+fn make_push_options(tx: Option<ProgressTx>, host: Option<ResolvedHost>) -> PushOptions<'static> {
     let mut push_opts = PushOptions::new();
     push_opts.remote_callbacks(make_callbacks(tx, host));
     push_opts
@@ -460,7 +464,13 @@ impl GitUrl {
                 // scp-like form has no port syntax; if a non-default port was
                 // requested via ssh_config, upgrade to ssh:// so libssh2 sees it.
                 if let Some(p) = port {
-                    format!("ssh://{}{}:{}{}", user_at, hostname, p, self.tail.replacen(':', "/", 1))
+                    format!(
+                        "ssh://{}{}:{}{}",
+                        user_at,
+                        hostname,
+                        p,
+                        self.tail.replacen(':', "/", 1)
+                    )
                 } else {
                     format!("{}{}{}", user_at, hostname, self.tail)
                 }
@@ -503,15 +513,15 @@ pub fn fetch_repo(path: &Path) -> Result<(), AppError> {
     fetch_repo_with_progress(path, None)
 }
 
-pub fn fetch_repo_with_progress(
-    path: &Path,
-    tx: Option<ProgressTx>,
-) -> Result<(), AppError> {
+pub fn fetch_repo_with_progress(path: &Path, tx: Option<ProgressTx>) -> Result<(), AppError> {
     let repo = Repository::open(path)?;
 
     let remotes = repo.remotes()?;
     for remote_name in remotes.iter().flatten() {
-        emit(tx.as_ref(), ProgressEvent::Stage(format!("fetching {}", remote_name)));
+        emit(
+            tx.as_ref(),
+            ProgressEvent::Stage(format!("fetching {}", remote_name)),
+        );
         let remote = repo.find_remote(remote_name)?;
 
         let refspecs: Vec<String> = remote
@@ -570,10 +580,7 @@ pub fn pull_rebase_repo(path: &Path) -> Result<(), AppError> {
     pull_rebase_repo_with_progress(path, None)
 }
 
-pub fn pull_rebase_repo_with_progress(
-    path: &Path,
-    tx: Option<ProgressTx>,
-) -> Result<(), AppError> {
+pub fn pull_rebase_repo_with_progress(path: &Path, tx: Option<ProgressTx>) -> Result<(), AppError> {
     fetch_repo_with_progress(path, tx.clone())?;
 
     let repo = Repository::open(path)?;
@@ -630,10 +637,7 @@ pub fn push_repo(path: &Path) -> Result<(), AppError> {
     push_repo_with_progress(path, None)
 }
 
-pub fn push_repo_with_progress(
-    path: &Path,
-    tx: Option<ProgressTx>,
-) -> Result<(), AppError> {
+pub fn push_repo_with_progress(path: &Path, tx: Option<ProgressTx>) -> Result<(), AppError> {
     let repo = Repository::open(path)?;
 
     let head = repo.head()?;

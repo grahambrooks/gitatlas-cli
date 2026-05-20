@@ -20,6 +20,6 @@ pub fn scan_roots(roots: &[PathBuf]) -> Vec<RepoInfo> {
         .map(|p| status::get_repo_info(p))
         .collect();
 
-    all_repos.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    all_repos.sort_by_key(|r| r.name.to_lowercase());
     all_repos
 }

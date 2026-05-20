@@ -4,12 +4,13 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{self, DisableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    self, DisableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
+};
 use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
-use rayon::prelude::*;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -18,6 +19,7 @@ use ratatui::widgets::{
     Block, Borders, Cell, Clear, Paragraph, Row, Table, TableState, Tabs, Wrap,
 };
 use ratatui::{Frame, Terminal};
+use rayon::prelude::*;
 
 use crate::cache;
 use crate::git::operations::ProgressEvent;
@@ -38,7 +40,11 @@ pub fn run() -> anyhow::Result<()> {
     let res = event_loop(&mut terminal);
 
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
     terminal.show_cursor()?;
 
     res
@@ -64,7 +70,13 @@ enum Tab {
 }
 
 impl Tab {
-    const ALL: [Tab; 5] = [Tab::Changes, Tab::History, Tab::Branches, Tab::Stashes, Tab::Readme];
+    const ALL: [Tab; 5] = [
+        Tab::Changes,
+        Tab::History,
+        Tab::Branches,
+        Tab::Stashes,
+        Tab::Readme,
+    ];
     fn title(&self) -> &'static str {
         match self {
             Tab::Changes => "Changes",
@@ -182,7 +194,9 @@ struct SingleState {
 }
 
 enum WorkerMsg {
-    Progress { name: String },
+    Progress {
+        name: String,
+    },
     Done {
         path: String,
         name: String,
@@ -290,7 +304,9 @@ impl App {
     }
 
     fn drain_worker(&mut self) {
-        let Some(bulk) = self.bulk.as_mut() else { return };
+        let Some(bulk) = self.bulk.as_mut() else {
+            return;
+        };
         loop {
             match bulk.rx.try_recv() {
                 Ok(WorkerMsg::Progress { name }) => {
@@ -343,7 +359,9 @@ impl App {
     }
 
     fn drain_single(&mut self) {
-        let Some(single) = self.single.as_mut() else { return };
+        let Some(single) = self.single.as_mut() else {
+            return;
+        };
         loop {
             match single.rx.try_recv() {
                 Ok(SingleEvent::Progress(ev)) => match ev {
@@ -361,7 +379,11 @@ impl App {
                             total_objects,
                         ));
                     }
-                    ProgressEvent::PushTransfer { current, total, bytes } => {
+                    ProgressEvent::PushTransfer {
+                        current,
+                        total,
+                        bytes,
+                    } => {
                         single.progress.push = Some((current, total, bytes));
                     }
                     ProgressEvent::Sideband(s) => single.progress.sideband = Some(s),
@@ -383,12 +405,7 @@ impl App {
                             }
                             cache::save(&self.repos);
                             self.set_status(
-                                format!(
-                                    "{} {} in {}",
-                                    success_verb,
-                                    name,
-                                    fmt_duration(elapsed)
-                                ),
+                                format!("{} {} in {}", success_verb, name, fmt_duration(elapsed)),
                                 Level::Success,
                             );
                         }
@@ -410,9 +427,7 @@ impl App {
 
 // ── Event loop ────────────────────────────────────────
 
-fn event_loop(
-    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-) -> anyhow::Result<()> {
+fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> anyhow::Result<()> {
     let mut app = App::new();
     loop {
         terminal.draw(|f| draw(f, &mut app))?;
@@ -500,12 +515,15 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
 
     let filter = match app.filter_health {
         None => String::from("all"),
-        Some(h) => format!("filter:{}", match h {
-            RepoHealth::Clean => "clean",
-            RepoHealth::Dirty => "dirty",
-            RepoHealth::Diverged => "diverged",
-            RepoHealth::Error => "error",
-        }),
+        Some(h) => format!(
+            "filter:{}",
+            match h {
+                RepoHealth::Clean => "clean",
+                RepoHealth::Dirty => "dirty",
+                RepoHealth::Diverged => "diverged",
+                RepoHealth::Error => "error",
+            }
+        ),
     };
 
     let right = Line::from(vec![
@@ -525,10 +543,7 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
         .split(area);
 
     f.render_widget(Paragraph::new(title), cols[0]);
-    f.render_widget(
-        Paragraph::new(right).alignment(Alignment::Right),
-        cols[1],
-    );
+    f.render_widget(Paragraph::new(right).alignment(Alignment::Right), cols[1]);
 }
 
 fn draw_statusline(f: &mut Frame, area: Rect, app: &App) {
@@ -635,7 +650,11 @@ fn draw_dashboard(f: &mut Frame, area: Rect, app: &mut App) {
     let header = Row::new(vec![
         "NAME", "BRANCH", "AHEAD", "BEHIND", "DIRTY", "STASH", "HEALTH", "PATH",
     ])
-    .style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan));
+    .style(
+        Style::default()
+            .add_modifier(Modifier::BOLD)
+            .fg(Color::Cyan),
+    );
 
     let border_label = if let Some(h) = app.filter_health {
         format!(" repositories (filter: {}) ", health_name(h))
@@ -646,7 +665,11 @@ fn draw_dashboard(f: &mut Frame, area: Rect, app: &mut App) {
     let table = Table::new(rows, widths)
         .header(header)
         .block(Block::default().borders(Borders::ALL).title(border_label))
-        .row_highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
+        .row_highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        )
         .highlight_symbol("▶ ");
 
     f.render_stateful_widget(table, area, &mut app.dash_state);
@@ -694,14 +717,22 @@ fn draw_detail(f: &mut Frame, area: Rect, app: &mut App) {
             Span::styled("on ", dim),
             Span::styled(
                 repo.branch.clone(),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw("   "),
             Span::styled("↑", dim),
-            Span::styled(repo.ahead.to_string(), counter_style(repo.ahead, Color::Green)),
+            Span::styled(
+                repo.ahead.to_string(),
+                counter_style(repo.ahead, Color::Green),
+            ),
             Span::raw(" "),
             Span::styled("↓", dim),
-            Span::styled(repo.behind.to_string(), counter_style(repo.behind, Color::Red)),
+            Span::styled(
+                repo.behind.to_string(),
+                counter_style(repo.behind, Color::Red),
+            ),
             Span::raw("   "),
             Span::styled("dirty ", dim),
             Span::styled(
@@ -733,10 +764,7 @@ fn draw_detail(f: &mut Frame, area: Rect, app: &mut App) {
     );
 
     // Tabs
-    let titles: Vec<Line> = Tab::ALL
-        .iter()
-        .map(|t| Line::from(t.title()))
-        .collect();
+    let titles: Vec<Line> = Tab::ALL.iter().map(|t| Line::from(t.title())).collect();
     let tabs = Tabs::new(titles)
         .block(Block::default().borders(Borders::ALL))
         .select(detail.tab.index())
@@ -769,23 +797,22 @@ fn draw_tab_changes(f: &mut Frame, area: Rect, detail: &mut Detail) {
                         c.status.short().to_string(),
                         file_status_style(c.status).add_modifier(Modifier::BOLD),
                     )),
-                    Cell::from(Span::styled(
-                        c.path.clone(),
-                        file_status_style(c.status),
-                    )),
+                    Cell::from(Span::styled(c.path.clone(), file_status_style(c.status))),
                 ])
             })
             .collect(),
         Some(_) => {
             f.render_widget(
-                Paragraph::new("(clean working tree)").block(Block::default().borders(Borders::ALL).title(" changes ")),
+                Paragraph::new("(clean working tree)")
+                    .block(Block::default().borders(Borders::ALL).title(" changes ")),
                 area,
             );
             return;
         }
         None => {
             f.render_widget(
-                Paragraph::new("loading…").block(Block::default().borders(Borders::ALL).title(" changes ")),
+                Paragraph::new("loading…")
+                    .block(Block::default().borders(Borders::ALL).title(" changes ")),
                 area,
             );
             return;
@@ -794,9 +821,19 @@ fn draw_tab_changes(f: &mut Frame, area: Rect, detail: &mut Detail) {
 
     let table = Table::new(
         rows,
-        [Constraint::Length(10), Constraint::Length(4), Constraint::Min(10)],
+        [
+            Constraint::Length(10),
+            Constraint::Length(4),
+            Constraint::Min(10),
+        ],
     )
-    .header(Row::new(vec!["STAGED", "ST", "PATH"]).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
+    .header(
+        Row::new(vec!["STAGED", "ST", "PATH"]).style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+    )
     .block(Block::default().borders(Borders::ALL).title(" changes "))
     .row_highlight_style(Style::default().bg(Color::DarkGray))
     .highlight_symbol("▶ ");
@@ -809,7 +846,8 @@ fn draw_tab_history(f: &mut Frame, area: Rect, detail: &mut Detail) {
         Some(c) => c,
         None => {
             f.render_widget(
-                Paragraph::new("loading…").block(Block::default().borders(Borders::ALL).title(" history ")),
+                Paragraph::new("loading…")
+                    .block(Block::default().borders(Borders::ALL).title(" history ")),
                 area,
             );
             return;
@@ -818,7 +856,8 @@ fn draw_tab_history(f: &mut Frame, area: Rect, detail: &mut Detail) {
 
     if commits.is_empty() {
         f.render_widget(
-            Paragraph::new("(no commits)").block(Block::default().borders(Borders::ALL).title(" history ")),
+            Paragraph::new("(no commits)")
+                .block(Block::default().borders(Borders::ALL).title(" history ")),
             area,
         );
         return;
@@ -842,7 +881,10 @@ fn draw_tab_history(f: &mut Frame, area: Rect, detail: &mut Detail) {
                     Style::default().fg(Color::Yellow),
                 )),
                 Cell::from(Span::styled(date, Style::default().fg(Color::DarkGray))),
-                Cell::from(Span::styled(c.author.clone(), Style::default().fg(Color::Cyan))),
+                Cell::from(Span::styled(
+                    c.author.clone(),
+                    Style::default().fg(Color::Cyan),
+                )),
                 Cell::from(Line::from(ref_spans)),
                 Cell::from(msg),
             ])
@@ -859,7 +901,13 @@ fn draw_tab_history(f: &mut Frame, area: Rect, detail: &mut Detail) {
             Constraint::Min(20),
         ],
     )
-    .header(Row::new(vec!["SHA", "DATE", "AUTHOR", "REFS", "MESSAGE"]).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
+    .header(
+        Row::new(vec!["SHA", "DATE", "AUTHOR", "REFS", "MESSAGE"]).style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+    )
     .block(Block::default().borders(Borders::ALL).title(" history "))
     .row_highlight_style(Style::default().bg(Color::DarkGray))
     .highlight_symbol("▶ ");
@@ -872,7 +920,8 @@ fn draw_tab_branches(f: &mut Frame, area: Rect, detail: &mut Detail) {
         Some(b) => b,
         None => {
             f.render_widget(
-                Paragraph::new("loading…").block(Block::default().borders(Borders::ALL).title(" branches ")),
+                Paragraph::new("loading…")
+                    .block(Block::default().borders(Borders::ALL).title(" branches ")),
                 area,
             );
             return;
@@ -881,7 +930,8 @@ fn draw_tab_branches(f: &mut Frame, area: Rect, detail: &mut Detail) {
 
     if branches.is_empty() {
         f.render_widget(
-            Paragraph::new("(no branches)").block(Block::default().borders(Borders::ALL).title(" branches ")),
+            Paragraph::new("(no branches)")
+                .block(Block::default().borders(Borders::ALL).title(" branches ")),
             area,
         );
         return;
@@ -900,7 +950,9 @@ fn draw_tab_branches(f: &mut Frame, area: Rect, detail: &mut Detail) {
             let marker = if b.is_head {
                 Cell::from(Span::styled(
                     "*".to_string(),
-                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
                 ))
             } else {
                 Cell::from(" ".to_string())
@@ -933,7 +985,13 @@ fn draw_tab_branches(f: &mut Frame, area: Rect, detail: &mut Detail) {
             Constraint::Min(20),
         ],
     )
-    .header(Row::new(vec!["", "KIND", "NAME", "UPSTREAM"]).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
+    .header(
+        Row::new(vec!["", "KIND", "NAME", "UPSTREAM"]).style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+    )
     .block(Block::default().borders(Borders::ALL).title(" branches "))
     .row_highlight_style(Style::default().bg(Color::DarkGray))
     .highlight_symbol("▶ ");
@@ -946,7 +1004,8 @@ fn draw_tab_stashes(f: &mut Frame, area: Rect, detail: &mut Detail) {
         Some(s) => s,
         None => {
             f.render_widget(
-                Paragraph::new("loading…").block(Block::default().borders(Borders::ALL).title(" stashes ")),
+                Paragraph::new("loading…")
+                    .block(Block::default().borders(Borders::ALL).title(" stashes ")),
                 area,
             );
             return;
@@ -955,7 +1014,8 @@ fn draw_tab_stashes(f: &mut Frame, area: Rect, detail: &mut Detail) {
 
     if stashes.is_empty() {
         f.render_widget(
-            Paragraph::new("(no stashes)").block(Block::default().borders(Borders::ALL).title(" stashes ")),
+            Paragraph::new("(no stashes)")
+                .block(Block::default().borders(Borders::ALL).title(" stashes ")),
             area,
         );
         return;
@@ -975,7 +1035,13 @@ fn draw_tab_stashes(f: &mut Frame, area: Rect, detail: &mut Detail) {
         .collect();
 
     let table = Table::new(rows, [Constraint::Length(12), Constraint::Min(20)])
-        .header(Row::new(vec!["REF", "MESSAGE"]).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
+        .header(
+            Row::new(vec!["REF", "MESSAGE"]).style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        )
         .block(Block::default().borders(Borders::ALL).title(" stashes "))
         .row_highlight_style(Style::default().bg(Color::DarkGray))
         .highlight_symbol("▶ ");
@@ -1005,10 +1071,15 @@ fn draw_help(f: &mut Frame, full: Rect) {
     let lines = vec![
         Line::from(Span::styled(
             " GitAtlas — keybindings ",
-            Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan),
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(Color::Cyan),
         )),
         Line::raw(""),
-        Line::from(Span::styled("Dashboard", Style::default().add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "Dashboard",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
         Line::raw("  ↑/k, ↓/j       move selection"),
         Line::raw("  g / G          jump to top / bottom"),
         Line::raw("  /              incremental search"),
@@ -1021,7 +1092,10 @@ fn draw_help(f: &mut Frame, full: Rect) {
         Line::raw("  s              scan configured roots"),
         Line::raw("  R              refresh selected repo status"),
         Line::raw(""),
-        Line::from(Span::styled("Detail", Style::default().add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "Detail",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
         Line::raw("  ←/h, →/l       previous / next tab"),
         Line::raw("  1–5            jump to tab"),
         Line::raw("  ↑/k, ↓/j       move selection (or scroll README)"),
@@ -1102,7 +1176,9 @@ fn behind_cell(n: u32) -> Cell<'static> {
 fn dirty_cell(n: u32) -> Cell<'static> {
     count_cell(
         n,
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
     )
 }
 
@@ -1235,15 +1311,11 @@ fn handle_dashboard_key(app: &mut App, key: KeyEvent) {
         KeyCode::Down | KeyCode::Char('j') => move_sel(&mut app.dash_state, indices.len(), 1),
         KeyCode::PageUp => move_sel(&mut app.dash_state, indices.len(), -10),
         KeyCode::PageDown => move_sel(&mut app.dash_state, indices.len(), 10),
-        KeyCode::Char('g') => {
-            if !indices.is_empty() {
-                app.dash_state.select(Some(0));
-            }
+        KeyCode::Char('g') if !indices.is_empty() => {
+            app.dash_state.select(Some(0));
         }
-        KeyCode::Char('G') => {
-            if !indices.is_empty() {
-                app.dash_state.select(Some(indices.len() - 1));
-            }
+        KeyCode::Char('G') if !indices.is_empty() => {
+            app.dash_state.select(Some(indices.len() - 1));
         }
 
         KeyCode::Enter => {
@@ -1337,35 +1409,43 @@ fn handle_detail_key(app: &mut App, key: KeyEvent) {
     }
 
     // Tab-specific navigation
-    let Some(detail) = app.detail.as_mut() else { return };
+    let Some(detail) = app.detail.as_mut() else {
+        return;
+    };
 
     match detail.tab {
         Tab::Changes => nav_table(key.code, &mut detail.changes_sel, list_len(&detail.changes)),
         Tab::History => nav_table(key.code, &mut detail.commits_sel, list_len(&detail.commits)),
-        Tab::Branches => nav_table(key.code, &mut detail.branches_sel, list_len(&detail.branches)),
+        Tab::Branches => nav_table(
+            key.code,
+            &mut detail.branches_sel,
+            list_len(&detail.branches),
+        ),
         Tab::Stashes => nav_table(key.code, &mut detail.stashes_sel, list_len(&detail.stashes)),
-        Tab::Readme => {
-            match key.code {
-                KeyCode::Up | KeyCode::Char('k') => {
-                    detail.readme_scroll = detail.readme_scroll.saturating_sub(1);
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    detail.readme_scroll = detail.readme_scroll.saturating_add(1);
-                }
-                KeyCode::PageUp => {
-                    detail.readme_scroll = detail.readme_scroll.saturating_sub(10);
-                }
-                KeyCode::PageDown => {
-                    detail.readme_scroll = detail.readme_scroll.saturating_add(10);
-                }
-                KeyCode::Char('g') => detail.readme_scroll = 0,
-                _ => {}
+        Tab::Readme => match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                detail.readme_scroll = detail.readme_scroll.saturating_sub(1);
             }
-        }
+            KeyCode::Down | KeyCode::Char('j') => {
+                detail.readme_scroll = detail.readme_scroll.saturating_add(1);
+            }
+            KeyCode::PageUp => {
+                detail.readme_scroll = detail.readme_scroll.saturating_sub(10);
+            }
+            KeyCode::PageDown => {
+                detail.readme_scroll = detail.readme_scroll.saturating_add(10);
+            }
+            KeyCode::Char('g') => detail.readme_scroll = 0,
+            _ => {}
+        },
     }
 
     // Detail-level remote ops on current repo
-    if let Some(repo) = app.repos.get(app.detail.as_ref().unwrap().repo_index).cloned() {
+    if let Some(repo) = app
+        .repos
+        .get(app.detail.as_ref().unwrap().repo_index)
+        .cloned()
+    {
         let path = PathBuf::from(&repo.path);
         match key.code {
             KeyCode::Char('f') => start_single(app, path, SingleOp::Fetch),
@@ -1382,15 +1462,11 @@ fn nav_table(key: KeyCode, state: &mut TableState, len: usize) {
         KeyCode::Down | KeyCode::Char('j') => move_sel(state, len, 1),
         KeyCode::PageUp => move_sel(state, len, -10),
         KeyCode::PageDown => move_sel(state, len, 10),
-        KeyCode::Char('g') => {
-            if len > 0 {
-                state.select(Some(0));
-            }
+        KeyCode::Char('g') if len > 0 => {
+            state.select(Some(0));
         }
-        KeyCode::Char('G') => {
-            if len > 0 {
-                state.select(Some(len - 1));
-            }
+        KeyCode::Char('G') if len > 0 => {
+            state.select(Some(len - 1));
         }
         _ => {}
     }
@@ -1451,15 +1527,11 @@ fn start_single(app: &mut App, path: PathBuf, op: SingleOp) {
     let done_tx = event_tx;
     thread::spawn(move || {
         let result = match op {
-            SingleOp::Fetch => {
-                operations::fetch_repo_with_progress(&worker_path, Some(prog_tx))
-            }
+            SingleOp::Fetch => operations::fetch_repo_with_progress(&worker_path, Some(prog_tx)),
             SingleOp::Pull => {
                 operations::pull_rebase_repo_with_progress(&worker_path, Some(prog_tx))
             }
-            SingleOp::Push => {
-                operations::push_repo_with_progress(&worker_path, Some(prog_tx))
-            }
+            SingleOp::Push => operations::push_repo_with_progress(&worker_path, Some(prog_tx)),
         };
         let payload = result
             .map(|()| git_status::get_repo_info(&worker_path))
@@ -1609,22 +1681,24 @@ fn start_bulk(app: &mut App, op: BulkOp) {
 
     let tx_done = tx.clone();
     thread::spawn(move || {
-        repos.par_iter().for_each_with(tx.clone(), |tx, (name, path_str)| {
-            let _ = tx.send(WorkerMsg::Progress { name: name.clone() });
-            let path = PathBuf::from(path_str);
-            let result = match op_verb.as_str() {
-                "fetch" => operations::fetch_repo(&path),
-                "pull" => operations::pull_rebase_repo(&path),
-                _ => Ok(()),
-            };
-            let updated = git_status::get_repo_info(&path);
-            let _ = tx.send(WorkerMsg::Done {
-                path: path_str.clone(),
-                name: name.clone(),
-                error: result.err().map(|e| e.to_string()),
-                updated,
+        repos
+            .par_iter()
+            .for_each_with(tx.clone(), |tx, (name, path_str)| {
+                let _ = tx.send(WorkerMsg::Progress { name: name.clone() });
+                let path = PathBuf::from(path_str);
+                let result = match op_verb.as_str() {
+                    "fetch" => operations::fetch_repo(&path),
+                    "pull" => operations::pull_rebase_repo(&path),
+                    _ => Ok(()),
+                };
+                let updated = git_status::get_repo_info(&path);
+                let _ = tx.send(WorkerMsg::Done {
+                    path: path_str.clone(),
+                    name: name.clone(),
+                    error: result.err().map(|e| e.to_string()),
+                    updated,
+                });
             });
-        });
         let _ = tx_done.send(WorkerMsg::Finished);
     });
 
@@ -1641,8 +1715,12 @@ fn start_bulk(app: &mut App, op: BulkOp) {
 // ── Lazy tab loading ──────────────────────────────────
 
 fn load_current_tab(app: &mut App) {
-    let Some(detail) = app.detail.as_mut() else { return };
-    let Some(repo) = app.repos.get(detail.repo_index) else { return };
+    let Some(detail) = app.detail.as_mut() else {
+        return;
+    };
+    let Some(repo) = app.repos.get(detail.repo_index) else {
+        return;
+    };
     let path = PathBuf::from(&repo.path);
 
     match detail.tab {
@@ -1706,7 +1784,9 @@ fn load_current_tab(app: &mut App) {
 }
 
 fn invalidate_current_tab(app: &mut App) {
-    let Some(detail) = app.detail.as_mut() else { return };
+    let Some(detail) = app.detail.as_mut() else {
+        return;
+    };
     match detail.tab {
         Tab::Changes => detail.changes = None,
         Tab::History => detail.commits = None,

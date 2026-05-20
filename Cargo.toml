@@ -13,7 +13,6 @@ path = "src/main.rs"
 clap = { version = "4", features = ["derive", "cargo"] }
 git2 = "0.20"
 ignore = "0.4"
-walkdir = "2.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
@@ -22,7 +21,6 @@ dirs-next = "2"
 anyhow = "1"
 comfy-table = "7"
 console = "0.16.3"
-dialoguer = "0.12.0"
 rayon = "1"
 ratatui = "0.30.0"
 crossterm = "0.29.0"
