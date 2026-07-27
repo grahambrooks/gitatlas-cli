@@ -746,6 +746,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "git2"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddddbf932745a6be37109b6112d3ee09696106f848449069d3a57bba937ab82e"
+dependencies = [
+ "bitflags 2.13.1",
+ "libc",
+ "libgit2-sys",
+ "log",
+]
+
+[[package]]
 name = "gitatlas"
 version = "2026.7.0"
 dependencies = [
@@ -756,7 +768,7 @@ dependencies = [
  "console",
  "crossterm",
  "dirs-next",
- "git2",
+ "git2 0.21.0",
  "ignore",
  "ratatui",
  "rayon",
@@ -1943,7 +1955,7 @@ dependencies = [
  "anyhow",
  "bitflags 2.13.1",
  "dirs",
- "git2",
+ "git2 0.20.4",
  "glob",
  "log",
  "thiserror 2.0.18",
