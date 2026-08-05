@@ -6,8 +6,8 @@ class GitatlasCli < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/grahambrooks/gitatlas-cli/releases/download/v2026.7.0/gitatlas-v2026.7.0-aarch64-apple-darwin.tar.gz"
-      sha256 "39fcfd7a951990ede3f7181de65cd3cf7eefc621f7203062203db43781c7e6a0"
+      url "https://github.com/grahambrooks/gitatlas-cli/archive/refs/tags/v2026.8.1.tar.gz"
+      sha256 "6106c61242645db404efb95e00f8459a96bc8df08fd52d1a794209c21120c762"
     end
     on_intel do
       odie "Intel Mac binaries are not provided. Run `cargo install --git https://github.com/grahambrooks/gitatlas-cli --locked` to build from source."
