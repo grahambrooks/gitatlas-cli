@@ -1,0 +1,21 @@
+Cargo.lock
+  s_58a2383c561445::t_88ef03bf625664 531-541,639-647,718,720,726-728,829-911,918-938,1056,1058,1077-1090,1118-1123,1273-1290,1362-1367,1480-1488,1899-1904,1971-1981,2119-2128,2170-2187,2480-2562
+Cargo.toml
+  s_58a2383c561445::t_eead679c0a12c8 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "de3d016852b244378ba82800fbc3f575cbe333ad",
+  "prompts": {},
+  "sessions": {
+    "s_58a2383c561445": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d5dfd7b-f2f0-43a7-a1c4-efe732817d53",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Graham Brooks <graham@grahambrooks.com>"
+    }
+  }
+}
