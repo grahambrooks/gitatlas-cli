@@ -1,0 +1,23 @@
+.github/workflows/release.yml
+  s_4d59b18c414bf2::t_3cfa331603bd4c 1,3-4,6-16,18-19,26-30,33-37,41,44-45,47-55,57-63,65-67,72-80,84,86-87,90,92-94,101-103,107-110,112,114-116,118-120,124,126,128-131,134-150,155,157,160-199
+.release.env
+  s_4d59b18c414bf2::t_877115fceda42e 1-5
+scripts/release.py
+  s_4d59b18c414bf2::t_3691ce7495fa3e 2,4,6-15,17-23,27-28,30-31,33-121,123-177,186,190-191,197,201,207,211,217-251,253-272,276
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "cc0775c5a819c1db69596bc98114283d2635e3fe",
+  "prompts": {},
+  "sessions": {
+    "s_4d59b18c414bf2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_4d59b18c414bf2",
+        "model": "unknown"
+      },
+      "human_author": "Graham Brooks <graham@grahambrooks.com>"
+    }
+  }
+}
