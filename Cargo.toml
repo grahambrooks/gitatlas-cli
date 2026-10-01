@@ -19,7 +19,7 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
 dirs-next = "2"
 anyhow = "1"
-comfy-table = "7"
+comfy-table = "8"
 console = "0.16.3"
 rayon = "1"
 ratatui = "0.30.0"
