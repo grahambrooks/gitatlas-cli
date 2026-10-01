@@ -488,9 +488,9 @@ dependencies = [
 
 [[package]]
 name = "dirs"
-version = "6.0.0"
+version = "7.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3e8aa94d75141228480295a7d0e7feb620b1a5ad9f12bc40be62411e38cce4e"
+checksum = "8d57d423b3c82e89b9a24ca3091fee61f456a26edbd28d26c65906f4bc1dcd8f"
 dependencies = [
  "dirs-sys",
 ]
@@ -1883,9 +1883,9 @@ checksum = "f9395f0f0eee849a9b707b2f06bb92a6a422090e2123bb2ef8e87a0e61892a8e"
 
 [[package]]
 name = "ssh2-config"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16d2108aade44855426db8417ee923f1cfc0c4b38b4bb4bd26d936f0d0f79e0f"
+checksum = "4b817975ac67aeb9583619989b802d6072bccc402ffc00744038c704e7246bb7"
 dependencies = [
  "bitflags 2.13.2",
  "dirs",
