@@ -1906,9 +1906,9 @@ checksum = "5b3dc8af474f516a851ff4bd12db780f948b9250ad37211e4eec0bccea54e01b"
 
 [[package]]
 name = "ssh2-config"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b817975ac67aeb9583619989b802d6072bccc402ffc00744038c704e7246bb7"
+checksum = "7220846f1080bafaf80204d7268f7e2a1fb0609e34520d2edc3e75cfc55f4c38"
 dependencies = [
  "bitflags 2.13.2",
  "dirs",
