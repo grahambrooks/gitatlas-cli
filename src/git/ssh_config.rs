@@ -25,14 +25,17 @@ fn config() -> Option<&'static SshConfig> {
     static CONFIG: OnceLock<Option<SshConfig>> = OnceLock::new();
     CONFIG
         .get_or_init(|| {
-            let home = std::env::var("HOME").ok()?;
-            let path = PathBuf::from(home).join(".ssh").join("config");
+            let home = PathBuf::from(std::env::var("HOME").ok()?);
+            let path = home.join(".ssh").join("config");
             if !path.exists() {
                 return None;
             }
             let file = std::fs::File::open(&path).ok()?;
             let mut reader = BufReader::new(file);
+            // Resolve `~` and relative `Include` paths against the same HOME
+            // used to locate the file, rather than ssh2-config's own lookup.
             SshConfig::default()
+                .home_dir(home)
                 .parse(&mut reader, ParseRule::ALLOW_UNKNOWN_FIELDS)
                 .ok()
         })

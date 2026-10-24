@@ -71,7 +71,7 @@ fn build_ref_map(repo: &Repository) -> HashMap<String, Vec<RefLabel>> {
     let head_name = repo
         .head()
         .ok()
-        .and_then(|h| h.shorthand().map(String::from));
+        .and_then(|h| h.shorthand().ok().map(String::from));
 
     if let Ok(branches) = repo.branches(None) {
         for (branch, branch_type) in branches.flatten() {
@@ -104,7 +104,7 @@ fn build_ref_map(repo: &Repository) -> HashMap<String, Vec<RefLabel>> {
     }
 
     if let Ok(tag_names) = repo.tag_names(None) {
-        for tag_name in tag_names.iter().flatten() {
+        for tag_name in tag_names.iter().filter_map(|name| name.ok().flatten()) {
             if let Ok(reference) = repo.find_reference(&format!("refs/tags/{}", tag_name)) {
                 let oid = reference
                     .peel(git2::ObjectType::Commit)
@@ -399,7 +399,7 @@ pub fn get_branches(path: &Path) -> Result<Vec<BranchInfo>, AppError> {
     let head_name = repo
         .head()
         .ok()
-        .and_then(|h| h.shorthand().map(String::from));
+        .and_then(|h| h.shorthand().ok().map(String::from));
 
     for branch_result in repo.branches(None)? {
         let (branch, branch_type) = branch_result?;
@@ -441,7 +441,7 @@ pub fn checkout_branch(path: &Path, branch_name: &str) -> Result<(), AppError> {
     if let Some(reference) = reference {
         let ref_name = reference
             .name()
-            .ok_or_else(|| AppError::msg("Invalid reference name"))?;
+            .map_err(|_| AppError::msg("Invalid reference name"))?;
         repo.set_head(ref_name)?;
     } else {
         repo.set_head_detached(object.id())?;
@@ -668,7 +668,7 @@ pub fn get_remotes(path: &Path) -> Result<Vec<RemoteInfo>, AppError> {
     let remote_names = repo.remotes()?;
     let mut remotes = Vec::new();
 
-    for name in remote_names.iter().flatten() {
+    for name in remote_names.iter().filter_map(|name| name.ok().flatten()) {
         let remote = repo.find_remote(name)?;
         let url = remote.url().unwrap_or("").to_string();
         remotes.push(RemoteInfo {
@@ -765,6 +765,8 @@ pub fn get_pr_url(path: &Path) -> Result<String, AppError> {
         .map_err(|_| AppError::msg("No 'origin' remote found"))?;
     let url = remote
         .url()
+        .ok()
+        .filter(|url| !url.is_empty())
         .ok_or_else(|| AppError::msg("Origin remote has no URL"))?;
 
     let base = normalize_remote_url(url)?;

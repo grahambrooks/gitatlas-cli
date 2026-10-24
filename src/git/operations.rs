@@ -517,7 +517,7 @@ pub fn fetch_repo_with_progress(path: &Path, tx: Option<ProgressTx>) -> Result<(
     let repo = Repository::open(path)?;
 
     let remotes = repo.remotes()?;
-    for remote_name in remotes.iter().flatten() {
+    for remote_name in remotes.iter().filter_map(|name| name.ok().flatten()) {
         emit(
             tx.as_ref(),
             ProgressEvent::Stage(format!("fetching {}", remote_name)),
@@ -527,7 +527,7 @@ pub fn fetch_repo_with_progress(path: &Path, tx: Option<ProgressTx>) -> Result<(
         let refspecs: Vec<String> = remote
             .fetch_refspecs()?
             .iter()
-            .flatten()
+            .filter_map(|spec| spec.ok().flatten())
             .map(String::from)
             .collect();
         let refspec_refs: Vec<&str> = refspecs.iter().map(|s| s.as_str()).collect();
@@ -588,7 +588,7 @@ pub fn pull_rebase_repo_with_progress(path: &Path, tx: Option<ProgressTx>) -> Re
     let head = repo.head()?;
     let branch_name = head
         .shorthand()
-        .ok_or_else(|| AppError::msg("HEAD is not on a branch"))?
+        .map_err(|_| AppError::msg("HEAD is not on a branch"))?
         .to_string();
 
     let upstream_ref_name = format!("refs/remotes/origin/{}", branch_name);
@@ -643,7 +643,7 @@ pub fn push_repo_with_progress(path: &Path, tx: Option<ProgressTx>) -> Result<()
     let head = repo.head()?;
     let branch_name = head
         .shorthand()
-        .ok_or_else(|| AppError::msg("HEAD is not on a branch"))?
+        .map_err(|_| AppError::msg("HEAD is not on a branch"))?
         .to_string();
 
     let remote = repo
@@ -652,7 +652,9 @@ pub fn push_repo_with_progress(path: &Path, tx: Option<ProgressTx>) -> Result<()
 
     let original_url = remote
         .pushurl()
-        .or_else(|| remote.url())
+        .ok()
+        .flatten()
+        .or_else(|| remote.url().ok())
         .unwrap_or("")
         .to_string();
     let (effective_url, resolved) = apply_ssh_config(&original_url);

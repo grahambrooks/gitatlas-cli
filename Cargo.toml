@@ -11,7 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive", "cargo"] }
-git2 = "0.20"
+git2 = { version = "0.21", features = ["ssh", "https"] }
 ignore = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -19,9 +19,9 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
 dirs-next = "2"
 anyhow = "1"
-comfy-table = "7"
+comfy-table = "8"
 console = "0.16.3"
 rayon = "1"
 ratatui = "0.30.0"
 crossterm = "0.29.0"
-ssh2-config = "0.8"
+ssh2-config = "0.9"

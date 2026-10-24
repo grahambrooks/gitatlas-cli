@@ -55,7 +55,7 @@ pub fn get_repo_info(path: &Path) -> RepoInfo {
 fn get_branch_name(repo: &Repository) -> String {
     repo.head()
         .ok()
-        .and_then(|head| head.shorthand().map(String::from))
+        .and_then(|head| head.shorthand().ok().map(String::from))
         .unwrap_or_else(|| "HEAD (detached)".to_string())
 }
 
@@ -71,8 +71,8 @@ fn get_ahead_behind(repo: &Repository) -> (u32, u32) {
     };
 
     let branch_name = match head.shorthand() {
-        Some(name) => name.to_string(),
-        None => return (0, 0),
+        Ok(name) => name.to_string(),
+        Err(_) => return (0, 0),
     };
 
     let upstream_name = format!("refs/remotes/origin/{}", branch_name);
@@ -112,7 +112,7 @@ fn get_stash_count(repo: &mut Repository) -> u32 {
 fn get_origin_url(repo: &Repository) -> Option<String> {
     repo.find_remote("origin")
         .ok()
-        .and_then(|r| r.url().map(String::from))
+        .and_then(|r| r.url().ok().filter(|url| !url.is_empty()).map(String::from))
 }
 
 fn determine_health(ahead: u32, behind: u32, dirty_files: u32) -> RepoHealth {

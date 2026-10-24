@@ -17,7 +17,7 @@ pub fn print_json<T: Serialize>(value: &T) {
 fn new_table() -> Table {
     let mut table = Table::new();
     table
-        .load_preset(presets::UTF8_FULL)
+        .load_style(presets::UTF8_FULL)
         .set_content_arrangement(ContentArrangement::Dynamic);
     table
 }
