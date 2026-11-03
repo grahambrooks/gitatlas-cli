@@ -1,7 +1,8 @@
 [package]
 name = "gitatlas"
 version = "2026.11.1"
-edition = "2021"
+edition = "2024"
+rust-version = "1.99.1"
 description = "Multi-repo Git management CLI (companion to the gitatlas GUI)"
 authors = ["Graham"]
 

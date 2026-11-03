@@ -18,16 +18,16 @@ pub fn get_commit_log(path: &Path, count: usize) -> Result<Vec<CommitInfo>, AppE
     let mut revwalk = repo.revwalk()?;
     revwalk.set_sorting(Sort::TIME)?;
 
-    if let Ok(head) = repo.head() {
-        if let Some(oid) = head.target() {
-            let _ = revwalk.push(oid);
-        }
+    if let Ok(head) = repo.head()
+        && let Some(oid) = head.target()
+    {
+        let _ = revwalk.push(oid);
     }
     for (branch, _) in repo.branches(None).into_iter().flatten().flatten() {
-        if let Ok(reference) = branch.into_reference().resolve() {
-            if let Some(oid) = reference.target() {
-                let _ = revwalk.push(oid);
-            }
+        if let Ok(reference) = branch.into_reference().resolve()
+            && let Some(oid) = reference.target()
+        {
+            let _ = revwalk.push(oid);
         }
     }
 
@@ -603,10 +603,10 @@ pub fn get_file_history(
 
     let mut revwalk = repo.revwalk()?;
     revwalk.set_sorting(Sort::TIME)?;
-    if let Ok(head) = repo.head() {
-        if let Some(oid) = head.target() {
-            let _ = revwalk.push(oid);
-        }
+    if let Ok(head) = repo.head()
+        && let Some(oid) = head.target()
+    {
+        let _ = revwalk.push(oid);
     }
 
     let mut commits = Vec::new();

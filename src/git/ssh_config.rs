@@ -65,11 +65,11 @@ pub fn resolve(host: &str) -> ResolvedHost {
 
     // ssh2-config 0.7 doesn't surface `IdentitiesOnly` as a typed field; it
     // lands in `unsupported_fields`. Read it from there.
-    if let Some(values) = params.unsupported_fields.get("identitiesonly") {
-        if let Some(v) = values.first() {
-            out.identities_only =
-                matches!(v.to_ascii_lowercase().as_str(), "yes" | "true" | "on" | "1");
-        }
+    if let Some(values) = params.unsupported_fields.get("identitiesonly")
+        && let Some(v) = values.first()
+    {
+        out.identities_only =
+            matches!(v.to_ascii_lowercase().as_str(), "yes" | "true" | "on" | "1");
     }
 
     out
@@ -77,10 +77,10 @@ pub fn resolve(host: &str) -> ResolvedHost {
 
 fn expand_tilde(path: PathBuf) -> PathBuf {
     let s = path.to_string_lossy();
-    if let Some(rest) = s.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home).join(rest);
-        }
+    if let Some(rest) = s.strip_prefix("~/")
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return PathBuf::from(home).join(rest);
     }
     path
 }

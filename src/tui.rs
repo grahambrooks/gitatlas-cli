@@ -9,7 +9,7 @@ use crossterm::event::{
 };
 use crossterm::execute;
 use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
@@ -271,10 +271,10 @@ impl App {
             .iter()
             .enumerate()
             .filter(|(_, r)| {
-                if let Some(h) = self.filter_health {
-                    if r.health != h {
-                        return false;
-                    }
+                if let Some(h) = self.filter_health
+                    && r.health != h
+                {
+                    return false;
                 }
                 if needle.is_empty() {
                     return true;
@@ -296,10 +296,10 @@ impl App {
     }
 
     fn tick(&mut self) {
-        if let Some(msg) = &self.status {
-            if msg.expires <= Instant::now() {
-                self.status = None;
-            }
+        if let Some(msg) = &self.status
+            && msg.expires <= Instant::now()
+        {
+            self.status = None;
         }
     }
 
@@ -439,12 +439,11 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> anyhow::
         } else {
             200
         };
-        if event::poll(Duration::from_millis(poll_ms))? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    handle_key(&mut app, key);
-                }
-            }
+        if event::poll(Duration::from_millis(poll_ms))?
+            && let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+        {
+            handle_key(&mut app, key);
         }
 
         app.drain_worker();
@@ -596,9 +595,7 @@ fn draw_statusline(f: &mut Frame, area: Rect, app: &App) {
             " ↑/↓ move  enter open  /search  a/c/d/v/e filter  f fetch  p pull  P push  F/U bulk  s scan  q quit"
         }
         Mode::Search => " type to filter   enter apply   esc cancel",
-        Mode::Detail => {
-            " ←/→ tab  ↑/↓ move  f fetch  p pull  P push  R reload  esc back  q quit"
-        }
+        Mode::Detail => " ←/→ tab  ↑/↓ move  f fetch  p pull  P push  R reload  esc back  q quit",
         Mode::Help => " esc/? close help",
     };
     f.render_widget(
@@ -1319,12 +1316,12 @@ fn handle_dashboard_key(app: &mut App, key: KeyEvent) {
         }
 
         KeyCode::Enter => {
-            if let Some(sel) = app.dash_state.selected() {
-                if let Some(&idx) = indices.get(sel) {
-                    app.detail = Some(Detail::new(idx));
-                    load_current_tab(app);
-                    app.mode = Mode::Detail;
-                }
+            if let Some(sel) = app.dash_state.selected()
+                && let Some(&idx) = indices.get(sel)
+            {
+                app.detail = Some(Detail::new(idx));
+                load_current_tab(app);
+                app.mode = Mode::Detail;
             }
         }
 
@@ -1606,21 +1603,21 @@ fn single_progress_summary(single: &SingleState) -> String {
         }
     }
 
-    if let Some((current, total, bytes)) = single.progress.push {
-        if total > 0 {
-            parts.push(format!(
-                "{}/{} objects • {}",
-                current,
-                total,
-                fmt_bytes(bytes)
-            ));
-        }
+    if let Some((current, total, bytes)) = single.progress.push
+        && total > 0
+    {
+        parts.push(format!(
+            "{}/{} objects • {}",
+            current,
+            total,
+            fmt_bytes(bytes)
+        ));
     }
 
-    if let Some((current, total)) = single.progress.rebase {
-        if total > 0 {
-            parts.push(format!("rebase {}/{}", current, total));
-        }
+    if let Some((current, total)) = single.progress.rebase
+        && total > 0
+    {
+        parts.push(format!("rebase {}/{}", current, total));
     }
 
     if let Some(tip) = &single.progress.tip {

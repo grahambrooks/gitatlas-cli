@@ -3,8 +3,8 @@ use git2::{
     RemoteCallbacks, Repository,
 };
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::Sender;
 use std::sync::Once;
+use std::sync::mpsc::Sender;
 
 use crate::error::AppError;
 use crate::git::ssh_config::{self, ResolvedHost};
@@ -56,7 +56,12 @@ fn ensure_ssh_auth_sock() {
                 if name.to_string_lossy().starts_with("com.apple.launchd.") {
                     let sock = entry.path().join("Listeners");
                     if sock.exists() {
-                        std::env::set_var("SSH_AUTH_SOCK", &sock);
+                        // FIXME(edition 2024): not proven sound. This runs once, but possibly
+                        // after worker threads exist, and libgit2/libssh2 read the environment
+                        // through C getenv, which std's env lock does not cover. Same race as
+                        // under edition 2021, where set_var was not marked unsafe. A fix would
+                        // pass the socket path to the SSH agent callback instead.
+                        unsafe { std::env::set_var("SSH_AUTH_SOCK", &sock) };
                         return;
                     }
                 }
@@ -568,10 +573,10 @@ fn redact_userinfo(url: &str) -> String {
         }
         return url.to_string();
     }
-    if let Some((_, after_at)) = url.split_once('@') {
-        if !url.contains("://") {
-            return after_at.to_string();
-        }
+    if let Some((_, after_at)) = url.split_once('@')
+        && !url.contains("://")
+    {
+        return after_at.to_string();
     }
     url.to_string()
 }

@@ -1,4 +1,4 @@
-use comfy_table::{presets, Attribute, Cell, Color, ContentArrangement, Table};
+use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table, presets};
 use console::style;
 use serde::Serialize;
 
