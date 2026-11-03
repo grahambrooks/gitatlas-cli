@@ -88,8 +88,7 @@ fn build_ref_map(repo: &Repository) -> HashMap<String, Vec<RefLabel>> {
                 None => continue,
             };
 
-            let is_head =
-                head_oid.as_deref() == Some(&oid) && head_name.as_deref() == Some(&name);
+            let is_head = head_oid.as_deref() == Some(&oid) && head_name.as_deref() == Some(&name);
 
             let kind = if is_head {
                 RefKind::Head

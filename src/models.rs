@@ -193,6 +193,9 @@ mod tests {
     #[test]
     fn ref_kind_serde_lowercase() {
         assert_eq!(serde_json::to_string(&RefKind::Head).unwrap(), "\"head\"");
-        assert_eq!(serde_json::to_string(&RefKind::Remote).unwrap(), "\"remote\"");
+        assert_eq!(
+            serde_json::to_string(&RefKind::Remote).unwrap(),
+            "\"remote\""
+        );
     }
 }

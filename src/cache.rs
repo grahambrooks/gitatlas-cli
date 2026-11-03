@@ -124,7 +124,10 @@ mod tests {
         assert_eq!(back[0].behind, 2);
         assert_eq!(back[0].dirty_files, 3);
         assert_eq!(back[0].health, RepoHealth::Diverged);
-        assert_eq!(back[0].remote_url.as_deref(), Some("git@github.com:me/repo.git"));
+        assert_eq!(
+            back[0].remote_url.as_deref(),
+            Some("git@github.com:me/repo.git")
+        );
     }
 
     #[test]
